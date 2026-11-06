@@ -1,19 +1,52 @@
 import 'package:flutter/material.dart';
 
-class ProfileScreen extends StatelessWidget {
+import '../config.dart';
+import '../services/api_service.dart';
+
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  String _status = 'در حال بررسی...';
+  bool _ok = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    try {
+      final h = await ApiService().health();
+      final ai = h['ai'] as Map<String, dynamic>?;
+      final configured = ai?['configured'] == true;
+      setState(() {
+        _ok = true;
+        _status = configured
+            ? 'AI فعال — مدل: ${ai?['model'] ?? '-'}'
+            : 'سرور وصل است (حالت mock — کلید API نیست)';
+      });
+    } catch (_) {
+      setState(() {
+        _ok = false;
+        _status = 'سرور در دسترس نیست\n${YarConfig.apiBaseUrl}';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('پروفایل'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('پروفایل')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           const CircleAvatar(
             radius: 48,
             backgroundColor: Color(0xFF2563EB),
@@ -25,86 +58,36 @@ class ProfileScreen extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
-            'پلن رایگان',
+            _status,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[600]),
+            style: TextStyle(
+              color: _ok ? Colors.green[700] : Colors.red[700],
+              height: 1.4,
+            ),
           ),
-          const SizedBox(height: 32),
-          _sectionTitle('اشتراک'),
+          const SizedBox(height: 24),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.workspace_premium, color: Colors.amber),
-              title: const Text('ارتقاء به پلن حرفه‌ای'),
-              subtitle: const Text('دسترسی کامل + یکپارچه‌سازی‌ها'),
-              trailing: const Icon(Icons.chevron_left),
-              onTap: () {},
+              leading: const Icon(Icons.refresh),
+              title: const Text('بررسی مجدد اتصال'),
+              onTap: _check,
             ),
           ),
-          const SizedBox(height: 24),
-          _sectionTitle('تنظیمات'),
           Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.notifications_outlined),
-                  title: const Text('اعلان‌ها'),
-                  trailing: const Icon(Icons.chevron_left),
-                  onTap: () {},
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.lock_outline),
-                  title: const Text('حریم خصوصی و امنیت'),
-                  trailing: const Icon(Icons.chevron_left),
-                  onTap: () {},
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.language),
-                  title: const Text('زبان'),
-                  trailing: const Text('فارسی'),
-                  onTap: () {},
-                ),
-              ],
+            child: ListTile(
+              leading: const Icon(Icons.link),
+              title: const Text('آدرس API'),
+              subtitle: Text(YarConfig.apiBaseUrl),
             ),
           ),
-          const SizedBox(height: 24),
-          _sectionTitle('درباره'),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.info_outline),
-                  title: const Text('درباره یار'),
-                  trailing: const Icon(Icons.chevron_left),
-                  onTap: () {},
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.help_outline),
-                  title: const Text('راهنما و پشتیبانی'),
-                  trailing: const Icon(Icons.chevron_left),
-                  onTap: () {},
-                ),
-              ],
-            ),
+          const SizedBox(height: 12),
+          const Text(
+            'برای گوشی واقعی، آی‌پی کامپیوتر را در lib/config.dart بگذار.\nAndroid Emulator معمولاً http://10.0.2.2:3000 است.',
+            style: TextStyle(color: Colors.grey, height: 1.5),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _sectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, right: 4),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          color: Colors.grey,
-        ),
       ),
     );
   }

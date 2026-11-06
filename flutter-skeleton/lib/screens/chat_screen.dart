@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../services/api_service.dart';
+
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -8,64 +10,88 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final TextEditingController _controller = TextEditingController();
-  final List<Map<String, dynamic>> _messages = [
-    {
-      'from': 'yar',
-      'text': 'سلام! من یار هستم. چطور می‌تونم امروز کمکت کنم؟',
-      'time': '۱۰:۳۰',
-    },
+  final _controller = TextEditingController();
+  final _scroll = ScrollController();
+  final _api = ApiService();
+  final List<_Msg> _messages = [
+    _Msg(fromUser: false, text: 'سلام! من یار هستم. چطور می‌تونم امروز کمکت کنم؟'),
   ];
+  bool _busy = false;
 
-  void _sendMessage() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send([String? preset]) async {
+    final text = (preset ?? _controller.text).trim();
+    if (text.isEmpty || _busy) return;
 
     setState(() {
-      _messages.add({
-        'from': 'user',
-        'text': text,
-        'time': _now(),
-      });
+      _messages.add(_Msg(fromUser: true, text: text));
       _controller.clear();
+      _busy = true;
     });
+    _scrollToEnd();
 
-    Future.delayed(const Duration(milliseconds: 900), () {
+    try {
+      final reply = await _api.chat(text);
+      if (!mounted) return;
       setState(() {
-        _messages.add({
-          'from': 'yar',
-          'text': _generateReply(text),
-          'time': _now(),
-        });
+        _messages.add(_Msg(fromUser: false, text: reply));
+        _busy = false;
       });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _messages.add(_Msg(
+          fromUser: false,
+          text:
+              'اتصال به سرور برقرار نشد.\nبک‌اند را روی پورت ۳۰۰۰ اجرا کن و آدرس را در lib/config.dart بررسی کن.\n\n($e)',
+        ));
+        _busy = false;
+      });
+    }
+    _scrollToEnd();
+  }
+
+  void _scrollToEnd() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
     });
   }
 
-  String _now() {
-    final now = DateTime.now();
-    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-  }
-
-  String _generateReply(String input) {
-    if (input.contains('قبض') || input.contains('برق')) {
-      return 'قبوضت رو چک کردم. قبض برق این ماه حدود ۲۸۰ هزار تومانه. می‌خوای برات پرداختش کنم؟';
-    }
-    if (input.contains('سفر') || input.contains('بلیط')) {
-      return 'عالی! برای کجا و چه تاریخی می‌خوای برنامه‌ریزی کنم؟';
-    }
-    return 'متوجه شدم. می‌تونم برات انجامش بدم یا اطلاعات بیشتری جمع کنم. جزئیات بیشتری بگو.';
+  Future<void> _reset() async {
+    try {
+      await _api.resetChat();
+    } catch (_) {}
+    setState(() {
+      _messages
+        ..clear()
+        ..add(_Msg(fromUser: false, text: 'گفتگو پاک شد. دوباره شروع کنیم؟'));
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('یار'),
-        centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.mic_none),
-            onPressed: () {},
+            tooltip: 'پاک کردن گفتگو',
+            icon: const Icon(Icons.refresh),
+            onPressed: _busy ? null : _reset,
           ),
         ],
       ),
@@ -73,36 +99,63 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           Expanded(
             child: ListView.builder(
+              controller: _scroll,
               padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
+              itemCount: _messages.length + (_busy ? 1 : 0),
               itemBuilder: (context, index) {
+                if (_busy && index == _messages.length) {
+                  return Align(
+                    alignment: Alignment.centerRight,
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.05),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: const SizedBox(
+                        width: 28,
+                        height: 28,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  );
+                }
+
                 final msg = _messages[index];
-                final isUser = msg['from'] == 'user';
                 return Align(
-                  alignment: isUser ? Alignment.centerLeft : Alignment.centerRight,
+                  alignment:
+                      msg.fromUser ? Alignment.centerLeft : Alignment.centerRight,
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     constraints: BoxConstraints(
-                      maxWidth: MediaQuery.of(context).size.width * 0.75,
+                      maxWidth: MediaQuery.sizeOf(context).width * 0.78,
                     ),
                     decoration: BoxDecoration(
-                      color: isUser
-                          ? Theme.of(context).colorScheme.primary
-                          : Colors.white,
+                      color: msg.fromUser ? primary : Colors.white,
                       borderRadius: BorderRadius.circular(18),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
                       ],
                     ),
                     child: Text(
-                      msg['text'],
+                      msg.text,
                       style: TextStyle(
-                        color: isUser ? Colors.white : Colors.black87,
+                        color: msg.fromUser ? Colors.white : Colors.black87,
                         height: 1.5,
                       ),
                     ),
@@ -117,8 +170,8 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Row(
               children: [
                 _chip('قبض برق رو چک کن'),
-                _chip('برنامه‌ریزی سفر'),
-                _chip('خلاصه گزارش'),
+                _chip('برنامه‌ریزی سفر شیراز'),
+                _chip('یک برنامه روزانه بده'),
               ],
             ),
           ),
@@ -131,6 +184,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _controller,
+                      enabled: !_busy,
                       textDirection: TextDirection.rtl,
                       decoration: InputDecoration(
                         hintText: 'پیامت رو بنویس...',
@@ -145,15 +199,15 @@ class _ChatScreenState extends State<ChatScreen> {
                           vertical: 14,
                         ),
                       ),
-                      onSubmitted: (_) => _sendMessage(),
+                      onSubmitted: (_) => _send(),
                     ),
                   ),
                   const SizedBox(width: 8),
                   CircleAvatar(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundColor: primary,
                     child: IconButton(
                       icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                      onPressed: _sendMessage,
+                      onPressed: _busy ? null : () => _send(),
                     ),
                   ),
                 ],
@@ -170,11 +224,14 @@ class _ChatScreenState extends State<ChatScreen> {
       padding: const EdgeInsets.only(left: 8),
       child: ActionChip(
         label: Text(label),
-        onPressed: () {
-          _controller.text = label;
-          _sendMessage();
-        },
+        onPressed: _busy ? null : () => _send(label),
       ),
     );
   }
+}
+
+class _Msg {
+  _Msg({required this.fromUser, required this.text});
+  final bool fromUser;
+  final String text;
 }

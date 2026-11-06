@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+
 import 'chat_screen.dart';
-import 'tasks_screen.dart';
 import 'goals_screen.dart';
 import 'profile_screen.dart';
+import 'tasks_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,9 +13,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 0;
+  int _index = 0;
 
-  final List<Widget> _screens = const [
+  final _screens = const [
     ChatScreen(),
     TasksScreen(),
     GoalsScreen(),
@@ -25,14 +26,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: IndexedStack(
-        index: _currentIndex,
+        index: _index,
         children: _screens,
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (index) {
-          setState(() => _currentIndex = index);
-        },
+        selectedIndex: _index,
+        onDestinationSelected: (i) => setState(() => _index = i),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.chat_bubble_outline),
