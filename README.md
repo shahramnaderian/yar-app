@@ -8,7 +8,7 @@
 |------|--------|
 | `web-prototype/index.html` | رابط چت (به بک‌اند وصل می‌شود) |
 | `backend/` | API + اتصال به مدل زبانی |
-| `flutter-skeleton/` | اسکلت اپ موبایل |
+| `flutter-skeleton/` | اپ موبایل (چت واقعی + راهنمای اجرا) |
 | `docs/` | مستندات |
 
 ## راه‌اندازی AI واقعی (۵ دقیقه)
@@ -39,24 +39,36 @@ npm start
 
 سرور روی `http://localhost:3000` بالا می‌آید.
 
-### ۳. پروتوتایپ را باز کن
+### ۳. پروتوتایپ وب
 
-فایل `web-prototype/index.html` را در مرورگر باز کن.
+فایل `web-prototype/index.html` را در مرورگر باز کن. باید **«AI فعال»** را ببینی.
 
-بالای صفحه باید **«AI فعال»** را ببینی. بعد هر پیامی بفرستی با مدل واقعی جواب می‌دهد.
+## اجرای اپ Flutter روی گوشی
 
-بدون کلید API، حالت **mock** (پاسخ آزمایشی) کار می‌کند.
+جزئیات کامل: [`flutter-skeleton/README.md`](flutter-skeleton/README.md)
+
+خلاصه:
+
+```bash
+cd flutter-skeleton
+flutter create . --project-name yar --org com.yar.app
+git checkout -- lib pubspec.yaml   # اگر lib بازنویسی شد
+flutter pub get
+
+# آدرس سرور را در lib/config.dart تنظیم کن
+flutter run
+```
+
+| محیط | API در `lib/config.dart` |
+|------|--------------------------|
+| Android Emulator | `http://10.0.2.2:3000` |
+| iOS Simulator | `http://localhost:3000` |
+| گوشی واقعی | `http://IP-کامپیوتر:3000` |
 
 ## تست سلامت API
 
 ```bash
 curl http://localhost:3000/api/health
-```
-
-نمونه پاسخ وقتی کلید ست شده:
-
-```json
-{ "status": "ok", "ai": { "configured": true, "model": "gpt-4o-mini" } }
 ```
 
 ## نکته امنیتی
