@@ -1,11 +1,14 @@
 {
   "name": "yar-backend",
-  "version": "0.1.0",
-  "description": "Backend API for Yar personal AI agent",
+  "version": "0.2.0",
+  "description": "Backend API for Yar personal AI agent with real AI",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "cors": "^2.8.5",
