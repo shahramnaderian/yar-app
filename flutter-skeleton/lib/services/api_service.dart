@@ -53,6 +53,8 @@ class ApiService {
         .timeout(YarConfig.requestTimeout);
   }
 
+  // ——— Tasks ———
+
   Future<List<Map<String, dynamic>>> tasks() async {
     final res =
         await http.get(_uri('/api/tasks')).timeout(YarConfig.requestTimeout);
@@ -61,11 +63,77 @@ class ApiService {
     return list.cast<Map<String, dynamic>>();
   }
 
+  Future<Map<String, dynamic>> createTask({
+    required String title,
+    String? description,
+  }) async {
+    final res = await http
+        .post(
+          _uri('/api/tasks'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'title': title,
+            'description': description ?? '',
+          }),
+        )
+        .timeout(YarConfig.requestTimeout);
+
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      throw Exception(body['error']?.toString() ?? 'خطا در ایجاد وظیفه');
+    }
+    return body['task'] as Map<String, dynamic>;
+  }
+
+  Future<void> approveTask(String id) async {
+    final res = await http
+        .post(_uri('/api/tasks/$id/approve'))
+        .timeout(YarConfig.requestTimeout);
+    if (res.statusCode != 200) {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      throw Exception(body['error']?.toString() ?? 'خطا در تأیید');
+    }
+  }
+
+  Future<void> deleteTask(String id) async {
+    final res = await http
+        .delete(_uri('/api/tasks/$id'))
+        .timeout(YarConfig.requestTimeout);
+    if (res.statusCode != 200) {
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      throw Exception(body['error']?.toString() ?? 'خطا در حذف');
+    }
+  }
+
+  // ——— Goals ———
+
   Future<List<Map<String, dynamic>>> goals() async {
     final res =
         await http.get(_uri('/api/goals')).timeout(YarConfig.requestTimeout);
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     final list = body['goals'] as List<dynamic>? ?? [];
     return list.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createGoal({
+    required String title,
+    String? target,
+  }) async {
+    final res = await http
+        .post(
+          _uri('/api/goals'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'title': title,
+            'target': target ?? '',
+          }),
+        )
+        .timeout(YarConfig.requestTimeout);
+
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode != 201 && res.statusCode != 200) {
+      throw Exception(body['error']?.toString() ?? 'خطا در ایجاد هدف');
+    }
+    return body['goal'] as Map<String, dynamic>;
   }
 }

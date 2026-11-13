@@ -44,7 +44,8 @@ const mockUser = {
   dailyLimit: 50
 };
 
-const mockTasks = [
+// داده‌های قابل تغییر در حافظه
+let mockTasks = [
   {
     id: 'task_1',
     title: 'بررسی قبض برق',
@@ -58,7 +59,20 @@ const mockTasks = [
     status: 'in_progress',
     createdAt: new Date().toISOString(),
     description: 'در حال خلاصه‌سازی گزارش فروش هفته گذشته...'
+  },
+  {
+    id: 'task_3',
+    title: 'رزرو بلیط تهران-شیراز',
+    status: 'completed',
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+    description: 'انجام شد • دیروز'
   }
+];
+
+let mockGoals = [
+  { id: 'goal_1', title: 'یادگیری Flutter', progress: 35, target: '۱۰ ساعت در ماه' },
+  { id: 'goal_2', title: 'ورزش منظم', progress: 60, target: '۳ جلسه در هفته' },
+  { id: 'goal_3', title: 'خواندن کتاب', progress: 20, target: '۱ کتاب در ماه' }
 ];
 
 function getHistory(sessionId) {
@@ -123,7 +137,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'yar-api',
-    version: '0.2.0',
+    version: '0.3.0',
     ai: {
       configured: Boolean(AI_API_KEY),
       model: AI_MODEL,
@@ -179,8 +193,28 @@ app.post('/api/chat/reset', (req, res) => {
   res.json({ ok: true });
 });
 
+// ——— Tasks ———
+
 app.get('/api/tasks', (req, res) => {
   res.json({ tasks: mockTasks });
+});
+
+app.post('/api/tasks', (req, res) => {
+  const { title, description } = req.body || {};
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    return res.status(400).json({ error: 'عنوان وظیفه الزامی است' });
+  }
+
+  const task = {
+    id: `task_${Date.now()}`,
+    title: title.trim().slice(0, 200),
+    description: (description || '').trim().slice(0, 500),
+    status: 'pending',
+    createdAt: new Date().toISOString()
+  };
+
+  mockTasks.unshift(task);
+  res.status(201).json({ success: true, task });
 });
 
 app.post('/api/tasks/:id/approve', (req, res) => {
@@ -190,13 +224,34 @@ app.post('/api/tasks/:id/approve', (req, res) => {
   res.json({ success: true, task });
 });
 
+app.delete('/api/tasks/:id', (req, res) => {
+  const index = mockTasks.findIndex((t) => t.id === req.params.id);
+  if (index === -1) return res.status(404).json({ error: 'وظیفه پیدا نشد' });
+  mockTasks.splice(index, 1);
+  res.json({ success: true });
+});
+
+// ——— Goals ———
+
 app.get('/api/goals', (req, res) => {
-  res.json({
-    goals: [
-      { id: 'goal_1', title: 'یادگیری Flutter', progress: 35, target: '۱۰ ساعت در ماه' },
-      { id: 'goal_2', title: 'ورزش منظم', progress: 60, target: '۳ جلسه در هفته' }
-    ]
-  });
+  res.json({ goals: mockGoals });
+});
+
+app.post('/api/goals', (req, res) => {
+  const { title, target } = req.body || {};
+  if (!title || typeof title !== 'string' || !title.trim()) {
+    return res.status(400).json({ error: 'عنوان هدف الزامی است' });
+  }
+
+  const goal = {
+    id: `goal_${Date.now()}`,
+    title: title.trim().slice(0, 200),
+    target: (target || '').trim().slice(0, 100),
+    progress: 0
+  };
+
+  mockGoals.unshift(goal);
+  res.status(201).json({ success: true, goal });
 });
 
 app.get('/api/me', (req, res) => {
