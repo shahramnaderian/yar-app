@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - "flutter-skeleton/**"
+      - "backend/**"
+      - "README.md"
       - ".github/workflows/build-android.yml"
 
 jobs:
