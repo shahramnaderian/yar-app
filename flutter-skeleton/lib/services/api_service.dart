@@ -1,24 +1,24 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../config.dart';
 
 class ApiService {
   ApiService({String? baseUrl}) : baseUrl = baseUrl ?? YarConfig.apiBaseUrl;
   final String baseUrl;
+  static const _storage = FlutterSecureStorage();
   static const _tokenKey = 'yar_auth_token';
   Uri _uri(String path) => Uri.parse(baseUrl + path);
   Future<Map<String, String>> _headers({bool json = false}) async {
     final h = <String, String>{};
     if (json) h['Content-Type'] = 'application/json';
-    final p = await SharedPreferences.getInstance();
-    final token = p.getString(_tokenKey);
+    final token = await _storage.read(key: _tokenKey);
     if (token != null && token.isNotEmpty) h['Authorization'] = 'Bearer ' + token;
     return h;
   }
-  Future<void> _saveToken(String token) async { final p = await SharedPreferences.getInstance(); await p.setString(_tokenKey, token); }
-  static Future<bool> hasToken() async { final p = await SharedPreferences.getInstance(); return (p.getString(_tokenKey) ?? '').isNotEmpty; }
-  static Future<void> clearToken() async { final p = await SharedPreferences.getInstance(); await p.remove(_tokenKey); }
+  Future<void> _saveToken(String token) async { await _storage.write(key: _tokenKey, value: token); }
+  static Future<bool> hasToken() async { return (await _storage.read(key: _tokenKey) ?? '').isNotEmpty; }
+  static Future<void> clearToken() async { await _storage.delete(key: _tokenKey); }
   Future<Map<String, dynamic>> _decode(http.Response r) async {
     final b = r.body.isEmpty ? <String, dynamic>{} : jsonDecode(r.body) as Map<String, dynamic>;
     if (r.statusCode < 200 || r.statusCode >= 300) throw Exception(b['error']?.toString() ?? 'خطای سرور');
