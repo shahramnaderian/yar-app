@@ -20,7 +20,12 @@ class YarApp extends StatelessWidget {
 class _AuthGate extends StatefulWidget { const _AuthGate(); @override State<_AuthGate> createState() => _AuthGateState(); }
 class _AuthGateState extends State<_AuthGate> {
   late Future<bool> _signedIn;
-  @override void initState() { super.initState(); _signedIn = ApiService.hasToken(); }
+  @override void initState() { super.initState(); _signedIn = _checkSession(); }
+  Future<bool> _checkSession() async {
+    if (!await ApiService.hasToken()) return false;
+    try { await ApiService().me(); return true; }
+    catch (_) { await ApiService.clearToken(); return false; }
+  }
   @override Widget build(BuildContext context) => FutureBuilder<bool>(future: _signedIn, builder: (context, s) {
     if (!s.hasData) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     return s.data! ? const HomeScreen() : const AuthScreen();
