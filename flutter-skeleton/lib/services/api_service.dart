@@ -33,7 +33,7 @@ class ApiService {
     final b = await _decode(r); await _saveToken(b['token'] as String); return b['user'] as Map<String, dynamic>;
   }
   Future<void> logout() async {
-    try { await http.post(_uri('/api/auth/logout'), headers: await _headers()).timeout(YarConfig.requestTimeout); } finally { await clearToken(); }
+    try { await http.post(_uri('/api/auth/logout'), headers: await _headers()).timeout(YarConfig.requestTimeout); } catch (_) { /* Local logout must work offline too. */ } finally { await clearToken(); }
   }
   Future<Map<String, dynamic>> me() async { final r = await http.get(_uri('/api/me'), headers: await _headers()).timeout(YarConfig.requestTimeout); return _decode(r); }
   Future<Map<String, dynamic>> health() async { final r = await http.get(_uri('/api/health')).timeout(YarConfig.requestTimeout); return _decode(r); }
