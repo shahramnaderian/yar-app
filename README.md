@@ -1,76 +1,40 @@
-# یار (Yar) — دستیار هوشمند شخصی
+# یار — دستیار هوشمند شخصی
 
-**یار** یک عامل هوش مصنوعی شخصی است. نسخهٔ فعلی به **AI واقعی** (OpenAI یا xAI Grok) وصل می‌شود.
+## نسخه MVP اندروید
+این مخزن شامل اپ Flutter فارسی و API مبتنی بر Node.js است.
 
-## ساختار
-
-| مسیر | توضیح |
-|------|--------|
-| `web-prototype/index.html` | رابط چت (به بک‌اند وصل می‌شود) |
-| `backend/` | API + اتصال به مدل زبانی |
-| `flutter-skeleton/` | اپ موبایل (چت واقعی + راهنمای اجرا) |
-| `docs/` | مستندات |
-
-## راه‌اندازی AI واقعی (۵ دقیقه)
-
-### ۱. کلید API بگیر
-
-- **OpenAI:** https://platform.openai.com/api-keys  
-- **xAI Grok:** https://console.x.ai
-
-### ۲. بک‌اند را اجرا کن
-
+### اجرای بک‌اند
+Node.js 18 یا بالاتر:
 ```bash
 cd backend
 npm install
-
-# OpenAI
-export AI_API_KEY="sk-..."
-export AI_BASE_URL="https://api.openai.com/v1"
+export AUTH_SECRET="$(openssl rand -hex 32)"
+export AI_API_KEY="کلید سرویس هوش مصنوعی"
 export AI_MODEL="gpt-4o-mini"
-
-# یا Grok:
-# export AI_API_KEY="xai-..."
-# export AI_BASE_URL="https://api.x.ai/v1"
-# export AI_MODEL="grok-2-latest"
-
 npm start
 ```
+سرور روی پورت 3000 اجرا می‌شود. `AUTH_SECRET` را حتماً به‌صورت secret در محیط استقرار تنظیم کنید؛ آن را در Git ثبت نکنید. داده‌های شروع کار در `backend/data.json` ذخیره می‌شوند؛ برای محیط چندنمونه‌ای/تولید، آن را با PostgreSQL یا سرویس دیتابیس مدیریت‌شده جایگزین کنید و دیسک پایدار داشته باشید.
 
-سرور روی `http://localhost:3000` بالا می‌آید.
-
-### ۳. پروتوتایپ وب
-
-فایل `web-prototype/index.html` را در مرورگر باز کن. باید **«AI فعال»** را ببینی.
-
-## اجرای اپ Flutter روی گوشی
-
-جزئیات کامل: [`flutter-skeleton/README.md`](flutter-skeleton/README.md)
-
-خلاصه:
-
+### اجرای Flutter
 ```bash
 cd flutter-skeleton
-flutter create . --project-name yar --org com.yar.app
-git checkout -- lib pubspec.yaml   # اگر lib بازنویسی شد
 flutter pub get
-
-# آدرس سرور را در lib/config.dart تنظیم کن
-flutter run
+flutter run --dart-define=API_BASE=https://YOUR_API_HOST
 ```
+برای شبیه‌ساز Android مقدار پیش‌فرض `http://10.0.2.2:3000` است. برای گوشی واقعی از آدرس HTTPS سرور استفاده کنید.
 
-| محیط | API در `lib/config.dart` |
-|------|--------------------------|
-| Android Emulator | `http://10.0.2.2:3000` |
-| iOS Simulator | `http://localhost:3000` |
-| گوشی واقعی | `http://IP-کامپیوتر:3000` |
+### ساخت APK
+از تب Actions در GitHub، گردش‌کار **Build Android APK** را اجرا کنید. فایل APK از بخش Artifacts قابل دریافت است.
 
-## تست سلامت API
+### امکانات MVP
+- ثبت‌نام و ورود با ایمیل و رمز عبور
+- چت با AI (OpenAI-compatible API)
+- وظایف و اهداف اختصاصی هر حساب
+- ذخیره محلی توکن ورود روی دستگاه
 
-```bash
-curl http://localhost:3000/api/health
-```
-
-## نکته امنیتی
-
-کلید API را فقط روی سرور (متغیر محیطی) بگذار؛ داخل فرانت یا گیت‌هاب commit نکن.
+### امنیت و محدودیت‌ها
+- رمز عبور با scrypt و salt یکتا ذخیره می‌شود؛ API فقط hash را نگه می‌دارد.
+- توکن امضاشده HMAC با انقضای ۳۰ روزه است.
+- همه مسیرهای داده شخصی به احراز هویت نیاز دارند.
+- در محیط تولید از HTTPS، محدودسازی نرخ درخواست، پایگاه داده مدیریت‌شده، پشتیبان‌گیری و سیاست حریم خصوصی استفاده کنید.
+- نسخه فعلی پرداخت، همگام‌سازی ابری چند دستگاهی و بازیابی رمز عبور ندارد.

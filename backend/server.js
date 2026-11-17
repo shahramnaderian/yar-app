@@ -1,264 +1,170 @@
 /**
- * یار (Yar) - Backend API با هوش مصنوعی واقعی
- * Node.js 18+ | Express
- *
- * تنظیمات از طریق متغیر محیطی:
- *   AI_API_KEY   — کلید OpenAI یا xAI (الزامی برای AI واقعی)
- *   AI_BASE_URL  — پیش‌فرض: https://api.openai.com/v1
- *   AI_MODEL     — پیش‌فرض: gpt-4o-mini
- *
- * مثال Grok:
- *   AI_BASE_URL=https://api.x.ai/v1
- *   AI_MODEL=grok-2-latest
+ * Yar API — authenticated MVP backend.
+ * Node.js 18+. Configure AI_API_KEY, AUTH_SECRET and PORT via environment.
+ * JSON storage is a starter persistence layer; use a managed database before scaling.
  */
-
 const express = require('express');
 const cors = require('cors');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const app = express();
-const PORT = process.env.PORT || 3000;
-
+const PORT = Number(process.env.PORT || 3000);
 const AI_API_KEY = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || process.env.XAI_API_KEY || '';
 const AI_BASE_URL = (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 const AI_MODEL = process.env.AI_MODEL || 'gpt-4o-mini';
-
-app.use(cors());
+const AUTH_SECRET = process.env.AUTH_SECRET || '';
+const DATA_FILE = process.env.YAR_DATA_FILE || path.join(__dirname, 'data.json');
+app.use(cors({ origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : true }));
 app.use(express.json({ limit: '1mb' }));
 
-const SYSTEM_PROMPT = `تو «یار» هستی — یک دستیار هوشمند شخصی فارسی‌زبان.
-
-شخصیت و قوانین:
-- همیشه به فارسی روان، دوستانه و مختصر جواب بده.
-- مثل یک دستیار واقعی کمک کن: برنامه‌ریزی، یادآوری، ایده‌پردازی، خلاصه‌سازی، پیشنهاد خرید، سفر و کارهای روزمره.
-- اگر کاری نیاز به تأیید کاربر دارد (پرداخت، ارسال پیام، رزرو) اول بپرس و تأیید بگیر.
-- وقتی مطمئن نیستی، صادق باش و حدس نزن.
-- از ایموجی کم و به‌جا استفاده کن.
-- خودت را به‌عنوان یار معرفی کن، نه به‌عنوان ChatGPT یا مدل دیگر.`;
-
-const conversations = new Map();
-
-const mockUser = {
-  id: 'user_1',
-  name: 'کاربر نمونه',
-  plan: 'free',
-  dailyUsage: 0,
-  dailyLimit: 50
-};
-
-// داده‌های قابل تغییر در حافظه
-let mockTasks = [
-  {
-    id: 'task_1',
-    title: 'بررسی قبض برق',
-    status: 'pending_approval',
-    createdAt: new Date().toISOString(),
-    description: 'قبض برق این ماه ۲۸۰ هزار تومان است. می‌خوای پرداختش کنم؟'
-  },
-  {
-    id: 'task_2',
-    title: 'خلاصه گزارش هفتگی',
-    status: 'in_progress',
-    createdAt: new Date().toISOString(),
-    description: 'در حال خلاصه‌سازی گزارش فروش هفته گذشته...'
-  },
-  {
-    id: 'task_3',
-    title: 'رزرو بلیط تهران-شیراز',
-    status: 'completed',
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    description: 'انجام شد • دیروز'
+const SYSTEM_PROMPT = 'تو «یار» هستی؛ دستیار هوشمند شخصی فارسی‌زبان. همیشه فارسی روان، دوستانه و روشن پاسخ بده. در برنامه‌ریزی، یادگیری، خلاصه‌سازی و کارهای روزمره کمک کن. برای اقداماتی مانند پرداخت، رزرو یا ارسال پیام، پیش از انجام تأیید بگیر. اگر مطمئن نیستی صادق باش. خودت را یار معرفی کن.';
+function loadDb() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+    return { users: parsed.users || [], tasks: parsed.tasks || {}, goals: parsed.goals || {}, conversations: parsed.conversations || {} };
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.error('Could not read data file:', error.message);
+    return { users: [], tasks: {}, goals: {}, conversations: {} };
   }
-];
-
-let mockGoals = [
-  { id: 'goal_1', title: 'یادگیری Flutter', progress: 35, target: '۱۰ ساعت در ماه' },
-  { id: 'goal_2', title: 'ورزش منظم', progress: 60, target: '۳ جلسه در هفته' },
-  { id: 'goal_3', title: 'خواندن کتاب', progress: 20, target: '۱ کتاب در ماه' }
-];
-
-function getHistory(sessionId) {
-  if (!conversations.has(sessionId)) {
-    conversations.set(sessionId, []);
-  }
-  return conversations.get(sessionId);
 }
-
-async function callAI(userMessage, sessionId) {
-  if (!AI_API_KEY) {
-    throw new Error('NO_API_KEY');
-  }
-
-  const history = getHistory(sessionId);
-  history.push({ role: 'user', content: userMessage });
-
-  // نگه داشتن حداکثر ۱۰ پیام اخیر برای هزینه کمتر
-  while (history.length > 10) history.shift();
-
-  const body = {
-    model: AI_MODEL,
-    messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...history],
-    temperature: 0.7,
-    max_tokens: 800
-  };
-
-  const res = await fetch(`${AI_BASE_URL}/chat/completions`, {
+let db = loadDb();
+let writeQueue = Promise.resolve();
+function persist() {
+  writeQueue = writeQueue.then(async () => {
+    const temp = DATA_FILE + '.tmp';
+    await fs.promises.mkdir(path.dirname(DATA_FILE), { recursive: true });
+    await fs.promises.writeFile(temp, JSON.stringify(db, null, 2), { mode: 0o600 });
+    await fs.promises.rename(temp, DATA_FILE);
+  }).catch((err) => console.error('Persistence error:', err));
+  return writeQueue;
+}
+function safeUser(user) {
+  return { id: user.id, name: user.name, email: user.email, plan: user.plan || 'free', createdAt: user.createdAt };
+}
+function tokenFor(user) {
+  const payload = Buffer.from(JSON.stringify({ sub: user.id, exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30 })).toString('base64url');
+  const signature = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('base64url');
+  return payload + '.' + signature;
+}
+function verifyToken(token) {
+  if (!AUTH_SECRET) return null;
+  const parts = String(token || '').split('.');
+  if (parts.length !== 2) return null;
+  const expected = crypto.createHmac('sha256', AUTH_SECRET).update(parts[0]).digest();
+  const actual = Buffer.from(parts[1], 'base64url');
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+    if (!payload.sub || payload.exp < Date.now() / 1000) return null;
+    return db.users.find((u) => u.id === payload.sub) || null;
+  } catch { return null; }
+}
+function requireAuth(req, res, next) {
+  const user = verifyToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''));
+  if (!user) return res.status(401).json({ error: 'برای ادامه وارد حساب کاربری شوید', code: 'UNAUTHORIZED' });
+  req.user = user;
+  next();
+}
+function userBucket(collection, userId) {
+  if (!db[collection][userId]) db[collection][userId] = [];
+  return db[collection][userId];
+}
+function hashPassword(password, salt = crypto.randomBytes(16).toString('hex')) {
+  return { salt, hash: crypto.scryptSync(password, salt, 64).toString('hex') };
+}
+function validPassword(password, user) {
+  const candidate = crypto.scryptSync(password, user.salt, 64);
+  const original = Buffer.from(user.passwordHash, 'hex');
+  return candidate.length === original.length && crypto.timingSafeEqual(candidate, original);
+}
+function mockReply(message) {
+  if (/قبض|برق|آب/.test(message)) return 'می‌توانم برای بررسی قبض راهنمایی‌ات کنم. برای پرداخت واقعی باید سرویس پرداخت امن متصل شود.';
+  if (/سفر|بلیط/.test(message)) return 'حتماً. مقصد و تاریخ سفرت را بگو تا برنامه‌ریزی کنیم.';
+  return 'متوجه شدم: «' + message + '». برای پاسخ هوشمند کامل، کلید سرویس AI را روی سرور تنظیم کن.';
+}
+async function callAI(message, userId) {
+  if (!AI_API_KEY) return mockReply(message);
+  const history = db.conversations[userId] || [];
+  const nextHistory = [...history, { role: 'user', content: message }].slice(-10);
+  const response = await fetch(AI_BASE_URL + '/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${AI_API_KEY}`
-    },
-    body: JSON.stringify(body)
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + AI_API_KEY },
+    body: JSON.stringify({ model: AI_MODEL, messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...nextHistory], temperature: 0.7, max_tokens: 800 })
   });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error('AI API error:', res.status, errText);
-    throw new Error(`AI_HTTP_${res.status}`);
-  }
-
-  const data = await res.json();
+  if (!response.ok) throw new Error('AI_HTTP_' + response.status);
+  const data = await response.json();
   const reply = data.choices?.[0]?.message?.content?.trim();
   if (!reply) throw new Error('EMPTY_REPLY');
-
-  history.push({ role: 'assistant', content: reply });
+  db.conversations[userId] = [...nextHistory, { role: 'assistant', content: reply }].slice(-10);
+  await persist();
   return reply;
 }
-
-function mockReply(message) {
-  if (message.includes('قبض') || message.includes('برق') || message.includes('آب')) {
-    return 'قبوضت رو چک کردم. قبض برق این ماه حدود ۲۸۰ هزار تومانه. می‌خوای برات پرداختش کنم؟ (حالت آزمایشی — کلید AI تنظیم نشده)';
-  }
-  if (message.includes('سفر') || message.includes('بلیط')) {
-    return 'برای کجا و چه تاریخی می‌خوای سفر برنامه‌ریزی کنم؟ (حالت آزمایشی)';
-  }
-  return `متوجه شدم: «${message}». الان در حالت آزمایشی هستم. برای پاسخ واقعی، کلید AI را در backend تنظیم کن.`;
-}
-
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'yar-api',
-    version: '0.3.0',
-    ai: {
-      configured: Boolean(AI_API_KEY),
-      model: AI_MODEL,
-      baseUrl: AI_BASE_URL
-    }
-  });
+app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'yar-api', version: '1.0.0', ai: { configured: Boolean(AI_API_KEY), model: AI_MODEL } }));
+app.post('/api/auth/register', async (req, res) => {
+  const name = String(req.body?.name || '').trim().slice(0, 80);
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  if (name.length < 2 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 8) return res.status(400).json({ error: 'نام، ایمیل معتبر و رمز عبور حداقل ۸ کاراکتری لازم است' });
+  if (db.users.some((u) => u.email === email)) return res.status(409).json({ error: 'این ایمیل قبلاً ثبت شده است' });
+  if (!AUTH_SECRET) return res.status(503).json({ error: 'تنظیم AUTH_SECRET روی سرور الزامی است' });
+  const credentials = hashPassword(password);
+  const user = { id: crypto.randomUUID(), name, email, salt: credentials.salt, passwordHash: credentials.hash, plan: 'free', createdAt: new Date().toISOString() };
+  db.users.push(user);
+  await persist();
+  res.status(201).json({ token: tokenFor(user), user: safeUser(user) });
 });
-
-app.post('/api/chat', async (req, res) => {
-  const { message, sessionId = 'default' } = req.body || {};
-  if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: 'پیام الزامی است' });
-  }
-
-  const text = message.trim().slice(0, 4000);
-  if (!text) {
-    return res.status(400).json({ error: 'پیام خالی است' });
-  }
-
+app.post('/api/auth/login', (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  const user = db.users.find((u) => u.email === email);
+  if (!user || !validPassword(password, user)) return res.status(401).json({ error: 'ایمیل یا رمز عبور نادرست است' });
+  if (!AUTH_SECRET) return res.status(503).json({ error: 'تنظیم AUTH_SECRET روی سرور الزامی است' });
+  res.json({ token: tokenFor(user), user: safeUser(user) });
+});
+app.get('/api/me', requireAuth, (req, res) => res.json({ ...safeUser(req.user), aiConfigured: Boolean(AI_API_KEY) }));
+app.post('/api/auth/logout', requireAuth, (_req, res) => res.json({ ok: true }));
+app.post('/api/chat', requireAuth, async (req, res) => {
+  const message = String(req.body?.message || '').trim().slice(0, 4000);
+  if (!message) return res.status(400).json({ error: 'پیام الزامی است' });
   try {
-    let reply;
-    let mode = 'ai';
-
-    if (AI_API_KEY) {
-      reply = await callAI(text, sessionId);
-    } else {
-      reply = mockReply(text);
-      mode = 'mock';
-    }
-
-    mockUser.dailyUsage += 1;
-
-    res.json({
-      reply,
-      mode,
-      usage: { used: mockUser.dailyUsage, limit: mockUser.dailyLimit }
-    });
-  } catch (err) {
-    console.error(err);
-    if (err.message === 'NO_API_KEY') {
-      return res.json({ reply: mockReply(text), mode: 'mock' });
-    }
-    res.status(502).json({
-      error: 'خطا در ارتباط با سرویس هوش مصنوعی',
-      detail: err.message
-    });
+    const reply = await callAI(message, req.user.id);
+    res.json({ reply, mode: AI_API_KEY ? 'ai' : 'mock' });
+  } catch (error) {
+    console.error('AI error:', error.message);
+    res.status(502).json({ error: 'ارتباط با هوش مصنوعی برقرار نشد' });
   }
 });
-
-app.post('/api/chat/reset', (req, res) => {
-  const { sessionId = 'default' } = req.body || {};
-  conversations.delete(sessionId);
-  res.json({ ok: true });
+app.post('/api/chat/reset', requireAuth, async (req, res) => {
+  delete db.conversations[req.user.id]; await persist(); res.json({ ok: true });
 });
-
-// ——— Tasks ———
-
-app.get('/api/tasks', (req, res) => {
-  res.json({ tasks: mockTasks });
+app.get('/api/tasks', requireAuth, (req, res) => res.json({ tasks: userBucket('tasks', req.user.id) }));
+app.post('/api/tasks', requireAuth, async (req, res) => {
+  const title = String(req.body?.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'عنوان وظیفه الزامی است' });
+  const task = { id: crypto.randomUUID(), title: title.slice(0, 200), description: String(req.body?.description || '').trim().slice(0, 500), status: 'pending', createdAt: new Date().toISOString() };
+  userBucket('tasks', req.user.id).unshift(task); await persist(); res.status(201).json({ success: true, task });
 });
-
-app.post('/api/tasks', (req, res) => {
-  const { title, description } = req.body || {};
-  if (!title || typeof title !== 'string' || !title.trim()) {
-    return res.status(400).json({ error: 'عنوان وظیفه الزامی است' });
-  }
-
-  const task = {
-    id: `task_${Date.now()}`,
-    title: title.trim().slice(0, 200),
-    description: (description || '').trim().slice(0, 500),
-    status: 'pending',
-    createdAt: new Date().toISOString()
-  };
-
-  mockTasks.unshift(task);
-  res.status(201).json({ success: true, task });
-});
-
-app.post('/api/tasks/:id/approve', (req, res) => {
-  const task = mockTasks.find((t) => t.id === req.params.id);
+app.post('/api/tasks/:id/approve', requireAuth, async (req, res) => {
+  const task = userBucket('tasks', req.user.id).find((t) => t.id === req.params.id);
   if (!task) return res.status(404).json({ error: 'وظیفه پیدا نشد' });
-  task.status = 'completed';
-  res.json({ success: true, task });
+  task.status = 'completed'; await persist(); res.json({ success: true, task });
 });
-
-app.delete('/api/tasks/:id', (req, res) => {
-  const index = mockTasks.findIndex((t) => t.id === req.params.id);
-  if (index === -1) return res.status(404).json({ error: 'وظیفه پیدا نشد' });
-  mockTasks.splice(index, 1);
-  res.json({ success: true });
+app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
+  const tasks = userBucket('tasks', req.user.id);
+  const index = tasks.findIndex((t) => t.id === req.params.id);
+  if (index < 0) return res.status(404).json({ error: 'وظیفه پیدا نشد' });
+  tasks.splice(index, 1); await persist(); res.json({ success: true });
 });
-
-// ——— Goals ———
-
-app.get('/api/goals', (req, res) => {
-  res.json({ goals: mockGoals });
+app.get('/api/goals', requireAuth, (req, res) => res.json({ goals: userBucket('goals', req.user.id) }));
+app.post('/api/goals', requireAuth, async (req, res) => {
+  const title = String(req.body?.title || '').trim();
+  if (!title) return res.status(400).json({ error: 'عنوان هدف الزامی است' });
+  const goal = { id: crypto.randomUUID(), title: title.slice(0, 200), target: String(req.body?.target || '').trim().slice(0, 100), progress: 0, createdAt: new Date().toISOString() };
+  userBucket('goals', req.user.id).unshift(goal); await persist(); res.status(201).json({ success: true, goal });
 });
-
-app.post('/api/goals', (req, res) => {
-  const { title, target } = req.body || {};
-  if (!title || typeof title !== 'string' || !title.trim()) {
-    return res.status(400).json({ error: 'عنوان هدف الزامی است' });
-  }
-
-  const goal = {
-    id: `goal_${Date.now()}`,
-    title: title.trim().slice(0, 200),
-    target: (target || '').trim().slice(0, 100),
-    progress: 0
-  };
-
-  mockGoals.unshift(goal);
-  res.status(201).json({ success: true, goal });
-});
-
-app.get('/api/me', (req, res) => {
-  res.json({ ...mockUser, aiConfigured: Boolean(AI_API_KEY) });
-});
-
+app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ error: 'خطای داخلی سرور' }); });
 app.listen(PORT, () => {
-  console.log(`یار API روی پورت ${PORT}`);
-  console.log(`AI: ${AI_API_KEY ? `فعال (${AI_MODEL})` : 'غیرفعال — حالت mock'}`);
+  console.log('Yar API listening on ' + PORT + '; AI ' + (AI_API_KEY ? 'enabled' : 'mock mode'));
+  if (!AUTH_SECRET) console.warn('AUTH_SECRET is missing: authentication endpoints will not issue tokens.');
 });
