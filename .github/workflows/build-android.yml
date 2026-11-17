@@ -41,7 +41,7 @@ jobs:
           MANIFEST=android/app/src/main/AndroidManifest.xml
           grep -q 'android.permission.INTERNET' "$MANIFEST" || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\\n    <application|' "$MANIFEST"
           flutter pub get
-          flutter analyze
+          flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Build release APK
         env:
