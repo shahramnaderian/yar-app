@@ -37,7 +37,7 @@ jobs:
         run: |
           cd flutter-skeleton
           flutter create . --project-name yar --org com.yar.app --platforms=android
-          git checkout -- lib pubspec.yaml
+          git checkout -- lib pubspec.yaml test
           flutter pub get
           flutter analyze
 
