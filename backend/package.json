@@ -3,7 +3,16 @@
   "version": "1.0.0",
   "description": "Authenticated API for Yar personal AI assistant",
   "main": "server.js",
-  "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
-  "engines": { "node": ">=18" },
-  "dependencies": { "cors": "^2.8.5", "express": "^4.21.0" }
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.0"
+  }
 }
