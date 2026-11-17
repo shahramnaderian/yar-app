@@ -38,6 +38,8 @@ jobs:
           cd flutter-skeleton
           flutter create . --project-name yar --org com.yar.app --platforms=android
           git checkout -- lib pubspec.yaml test
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.INTERNET' "$MANIFEST" || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\\n    <application|' "$MANIFEST"
           flutter pub get
           flutter analyze
 
