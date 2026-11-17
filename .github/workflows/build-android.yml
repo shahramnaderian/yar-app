@@ -8,6 +8,19 @@ on:
       - ".github/workflows/build-android.yml"
 
 jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test backend
+        run: |
+          cd backend
+          npm install
+          npm test
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -22,6 +35,7 @@ jobs:
         run: |
           cd flutter-skeleton
           flutter create . --project-name yar --org com.yar.app --platforms=android
+          git checkout -- lib pubspec.yaml
           flutter pub get
           flutter analyze
 
