@@ -15,30 +15,30 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.5"
           channel: stable
+          cache: true
 
       - name: Prepare Flutter project
         run: |
           cd flutter-skeleton
-          flutter create . --project-name yar --org com.yar.app --platforms=android || true
-          # restore our sources if create overwrote them
-          git checkout -- lib pubspec.yaml 2>/dev/null || true
-          # ensure internet + cleartext
-          MANIFEST=android/app/src/main/AndroidManifest.xml
-          if [ -f "$MANIFEST" ]; then
-            grep -q android.permission.INTERNET "$MANIFEST" || sed -i 's|<manifest |<manifest |; s|<manifest xmlns:android="http://schemas.android.com/apk/res/android">|<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.INTERNET"/>|' "$MANIFEST"
-            grep -q usesCleartextTraffic "$MANIFEST" || sed -i 's/<application /<application android:usesCleartextTraffic="true" /' "$MANIFEST"
-          fi
+          flutter create . --project-name yar --org com.yar.app --platforms=android
           flutter pub get
+          flutter analyze
 
-      - name: Build APK
+      - name: Build release APK
+        env:
+          API_BASE: ${{ vars.API_BASE }}
         run: |
           cd flutter-skeleton
-          flutter build apk --release
+          if [ -n "$API_BASE" ]; then
+            flutter build apk --release --dart-define=API_BASE="$API_BASE"
+          else
+            flutter build apk --release
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: yar-release-apk
           path: flutter-skeleton/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
